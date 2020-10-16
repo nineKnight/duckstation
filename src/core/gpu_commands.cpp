@@ -267,6 +267,8 @@ bool GPU::HandleSetDrawingAreaBottomRightCommand()
     m_drawing_area.right = right;
     m_drawing_area.bottom = bottom;
     m_drawing_area_changed = true;
+
+    UpdateDepthBufferFromMaskBit();
   }
 
   AddCommandTicks(1);

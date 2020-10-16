@@ -584,7 +584,7 @@ bool GPU_HW_Vulkan::CompilePipelines()
   VkPipelineCache pipeline_cache = g_vulkan_shader_cache->GetPipelineCache();
 
   GPU_HW_ShaderGen shadergen(m_host_display->GetRenderAPI(), m_resolution_scale, m_true_color, m_scaled_dithering,
-                             m_texture_filtering, m_using_uv_limits, m_supports_dual_source_blend);
+                             m_texture_filtering, m_using_uv_limits, m_pgxp_depth_buffer, m_supports_dual_source_blend);
 
   Common::Timer compile_time;
   const int progress_total = 2 + (4 * 9 * 2 * 2) + (2 * 4 * 5 * 9 * 2 * 2) + 1 + 2 + 2 + 2 + 2 + (2 * 3);

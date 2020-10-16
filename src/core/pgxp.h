@@ -32,6 +32,8 @@ void GTE_PushSXYZ2f(float _x, float _y, float _z, unsigned int _v);
 void GTE_PushSXYZ2s(s64 _x, s64 _y, s64 _z, u32 v);
 int GTE_NCLIP_valid(u32 sxy0, u32 sxy1, u32 sxy2);
 float GTE_NCLIP();
+void GTE_AVSZ3(u16 z1, u16 z2, u16 z3, s16 scale);
+void GTE_AVSZ4(u16 z1, u16 z2, u16 z3, s16 scale);
 
 // Data transfer tracking
 void CPU_MFC2(u32 instr, u32 rtVal, u32 rdVal); // copy GTE data reg to GPR reg (MFC2)

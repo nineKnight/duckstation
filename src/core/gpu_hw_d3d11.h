@@ -98,6 +98,7 @@ private:
   ComPtr<ID3D11DepthStencilState> m_depth_disabled_state;
   ComPtr<ID3D11DepthStencilState> m_depth_test_always_state;
   ComPtr<ID3D11DepthStencilState> m_depth_test_less_state;
+  ComPtr<ID3D11DepthStencilState> m_depth_test_greater_state;
 
   ComPtr<ID3D11BlendState> m_blend_disabled_state;
   ComPtr<ID3D11BlendState> m_blend_no_color_writes_state;

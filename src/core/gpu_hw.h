@@ -100,6 +100,7 @@ protected:
     bool interlacing;
     bool set_mask_while_drawing;
     bool check_mask_before_draw;
+    bool use_depth_buffer;
 
     // We need two-pass rendering when using BG-FG blending and texturing, as the transparency can be enabled
     // on a per-pixel basis, and the opaque pixels shouldn't be blended at all.
@@ -255,7 +256,9 @@ protected:
 
   /// Computes polygon U/V boundaries.
   static void ComputePolygonUVLimits(BatchVertex* vertices, u32 num_vertices);
-  static bool AreUVLimitsNeeded();
+
+  /// Sets the depth test flag for PGXP depth buffering.
+  void SetBatchDepthBuffer(bool enabled);
 
   HeapArray<u16, VRAM_WIDTH * VRAM_HEIGHT> m_vram_shadow;
 
@@ -273,6 +276,7 @@ protected:
   GPUTextureFilter m_texture_filtering = GPUTextureFilter::Nearest;
   bool m_supports_dual_source_blend = false;
   bool m_using_uv_limits = false;
+  bool m_pgxp_depth_buffer = false;
 
   BatchConfig m_batch = {};
   BatchUBOData m_batch_ubo_data = {};

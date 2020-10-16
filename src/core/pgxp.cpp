@@ -491,6 +491,21 @@ void GTE_PushSXYZ2s(s64 _x, s64 _y, s64 _z, u32 v)
   GTE_PushSXYZ2f(fx, fy, fz, v);
 }
 
+void GTE_AVSZ3(u16 z1, u16 z2, u16 z3, s16 scale)
+{
+  //SXY0.z *= float(scale) / 32767.0f;
+  //SXY1.z *= float(scale) / 32767.0f;
+  //SXY2.z *= float(scale) / 32767.0f;
+}
+
+void GTE_AVSZ4(u16 z1, u16 z2, u16 z3, s16 scale)
+{
+  //SXY0.z *= float(scale) / 32767.0f;
+  //SXY1.z *= float(scale) / 32767.0f;
+  //SXY2.z *= float(scale) / 32767.0f;
+  //SXY3.z *= float(scale) / 32767.0f;
+}
+
 #define VX(n) (psxRegs.CP2D.p[n << 1].sw.l)
 #define VY(n) (psxRegs.CP2D.p[n << 1].sw.h)
 #define VZ(n) (psxRegs.CP2D.p[(n << 1) + 1].sw.l)

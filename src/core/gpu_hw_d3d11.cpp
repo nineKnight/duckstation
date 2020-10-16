@@ -185,7 +185,7 @@ bool GPU_HW_D3D11::CreateFramebuffer()
   const u32 texture_width = VRAM_WIDTH * m_resolution_scale;
   const u32 texture_height = VRAM_HEIGHT * m_resolution_scale;
   const DXGI_FORMAT texture_format = DXGI_FORMAT_R8G8B8A8_UNORM;
-  const DXGI_FORMAT depth_format = DXGI_FORMAT_D16_UNORM;
+  const DXGI_FORMAT depth_format = DXGI_FORMAT_D32_FLOAT;
 
   if (!m_vram_texture.Create(m_device.Get(), texture_width, texture_height, texture_format,
                              D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET) ||
@@ -281,6 +281,7 @@ bool GPU_HW_D3D11::CreateStateObjects()
   CD3D11_RASTERIZER_DESC rs_desc = CD3D11_RASTERIZER_DESC(CD3D11_DEFAULT());
   rs_desc.CullMode = D3D11_CULL_NONE;
   rs_desc.ScissorEnable = TRUE;
+  rs_desc.DepthClipEnable = !m_pgxp_depth_buffer;
   hr = m_device->CreateRasterizerState(&rs_desc, m_cull_none_rasterizer_state.ReleaseAndGetAddressOf());
   if (FAILED(hr))
     return false;
@@ -299,8 +300,13 @@ bool GPU_HW_D3D11::CreateStateObjects()
   if (FAILED(hr))
     return false;
 
-  ds_desc.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
+  ds_desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
   hr = m_device->CreateDepthStencilState(&ds_desc, m_depth_test_less_state.ReleaseAndGetAddressOf());
+  if (FAILED(hr))
+    return false;
+
+  ds_desc.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
+  hr = m_device->CreateDepthStencilState(&ds_desc, m_depth_test_greater_state.ReleaseAndGetAddressOf());
   if (FAILED(hr))
     return false;
 
@@ -360,6 +366,7 @@ void GPU_HW_D3D11::DestroyStateObjects()
   m_point_sampler_state.Reset();
   m_blend_no_color_writes_state.Reset();
   m_blend_disabled_state.Reset();
+  m_depth_test_greater_state.Reset();
   m_depth_test_less_state.Reset();
   m_depth_test_always_state.Reset();
   m_depth_disabled_state.Reset();
@@ -373,7 +380,7 @@ bool GPU_HW_D3D11::CompileShaders()
                     g_settings.gpu_use_debug_device);
 
   GPU_HW_ShaderGen shadergen(m_host_display->GetRenderAPI(), m_resolution_scale, m_true_color, m_scaled_dithering,
-                             m_texture_filtering, m_using_uv_limits, m_supports_dual_source_blend);
+                             m_texture_filtering, m_using_uv_limits, m_pgxp_depth_buffer, m_supports_dual_source_blend);
 
   Common::Timer compile_time;
   const int progress_total = 1 + 1 + 2 + (4 * 9 * 2 * 2) + 7 + (2 * 3);
@@ -621,8 +628,16 @@ void GPU_HW_D3D11::DrawBatchVertices(BatchRenderMode render_mode, u32 base_verte
   const TransparencyMode transparency_mode =
     (render_mode == BatchRenderMode::OnlyOpaque) ? TransparencyMode::Disabled : m_batch.transparency_mode;
   m_context->OMSetBlendState(m_batch_blend_states[static_cast<u8>(transparency_mode)].Get(), nullptr, 0xFFFFFFFFu);
-  m_context->OMSetDepthStencilState(
-    m_batch.check_mask_before_draw ? m_depth_test_less_state.Get() : m_depth_test_always_state.Get(), 0);
+
+  ID3D11DepthStencilState* depth_state;
+  if (m_batch.use_depth_buffer)
+    depth_state = m_depth_test_less_state.Get();
+  else if (m_batch.check_mask_before_draw)
+    depth_state = m_depth_test_greater_state.Get();
+  else
+    depth_state = m_depth_test_always_state.Get();
+
+  m_context->OMSetDepthStencilState(depth_state, 0);
 
   m_context->Draw(num_vertices, base_vertex);
 }
@@ -781,8 +796,10 @@ void GPU_HW_D3D11::UpdateVRAM(u32 x, u32 y, u32 width, u32 height, const void* d
   m_texture_stream_buffer.Unmap(m_context.Get(), num_pixels * sizeof(u16));
 
   const VRAMWriteUBOData uniforms = GetVRAMWriteUBOData(x, y, width, height, map_result.index_aligned);
-  m_context->OMSetDepthStencilState(
-    m_GPUSTAT.check_mask_before_draw ? m_depth_test_less_state.Get() : m_depth_test_always_state.Get(), 0);
+  m_context->OMSetDepthStencilState((m_GPUSTAT.check_mask_before_draw && !m_batch.use_depth_buffer) ?
+                                      m_depth_test_greater_state.Get() :
+                                      m_depth_test_always_state.Get(),
+                                    0);
   m_context->PSSetShaderResources(0, 1, m_texture_stream_buffer_srv_r16ui.GetAddressOf());
 
   // the viewport should already be set to the full vram, so just adjust the scissor
@@ -809,13 +826,15 @@ void GPU_HW_D3D11::CopyVRAM(u32 src_x, u32 src_y, u32 dst_x, u32 dst_y, u32 widt
     const Common::Rectangle<u32> dst_bounds_scaled(dst_bounds * m_resolution_scale);
     SetViewportAndScissor(dst_bounds_scaled.left, dst_bounds_scaled.top, dst_bounds_scaled.GetWidth(),
                           dst_bounds_scaled.GetHeight());
-    m_context->OMSetDepthStencilState(
-      m_GPUSTAT.check_mask_before_draw ? m_depth_test_less_state.Get() : m_depth_test_always_state.Get(), 0);
+    m_context->OMSetDepthStencilState((m_GPUSTAT.check_mask_before_draw && !m_batch.use_depth_buffer) ?
+                                        m_depth_test_greater_state.Get() :
+                                        m_depth_test_always_state.Get(),
+                                      0);
     m_context->PSSetShaderResources(0, 1, m_vram_read_texture.GetD3DSRVArray());
     DrawUtilityShader(m_vram_copy_pixel_shader.Get(), &uniforms, sizeof(uniforms));
     RestoreGraphicsAPIState();
 
-    if (m_GPUSTAT.check_mask_before_draw)
+    if (m_GPUSTAT.check_mask_before_draw && !m_batch.use_depth_buffer)
       m_current_depth++;
 
     return;
