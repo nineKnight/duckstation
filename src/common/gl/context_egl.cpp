@@ -33,12 +33,8 @@ bool ContextEGL::Initialize(const Version* versions_to_try, size_t num_versions_
     return false;
   }
 
-  m_display = eglGetDisplay(static_cast<EGLNativeDisplayType>(m_wi.display_connection));
-  if (!m_display)
-  {
-    Log_ErrorPrintf("eglGetDisplay() failed: %d", eglGetError());
+  if (!SetDisplay())
     return false;
-  }
 
   int egl_major, egl_minor;
   if (!eglInitialize(m_display, &egl_major, &egl_minor))
@@ -64,6 +60,18 @@ bool ContextEGL::Initialize(const Version* versions_to_try, size_t num_versions_
   }
 
   return false;
+}
+
+bool ContextEGL::SetDisplay()
+{
+  m_display = eglGetDisplay(static_cast<EGLNativeDisplayType>(m_wi.display_connection));
+  if (!m_display)
+  {
+    Log_ErrorPrintf("eglGetDisplay() failed: %d", eglGetError());
+    return false;
+  }
+
+  return true;
 }
 
 void* ContextEGL::GetProcAddress(const char* name)
@@ -258,6 +266,9 @@ bool ContextEGL::CreateContext(const Version& version, EGLContext share_context)
       surface_attribs[nsurface_attribs++] = 6;
       surface_attribs[nsurface_attribs++] = EGL_BLUE_SIZE;
       surface_attribs[nsurface_attribs++] = 5;
+      break;
+
+    case WindowInfo::SurfaceFormat::Auto:
       break;
 
     default:

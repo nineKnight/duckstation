@@ -16,12 +16,15 @@ Log_SetChannel(GL::Context);
 #endif
 
 #ifdef USE_EGL
-#if defined(USE_X11) || defined(USE_WAYLAND)
+#if defined(USE_X11) || defined(USE_WAYLAND) || defined(USE_DRMKMS)
 #if defined(USE_X11)
 #include "context_egl_x11.h"
 #endif
 #if defined(USE_WAYLAND)
 #include "context_egl_wayland.h"
+#endif
+#if defined(USE_DRMKMS)
+#include "context_egl_drm.h"
 #endif
 #elif defined(ANDROID)
 #include "context_egl_android.h"
@@ -103,6 +106,11 @@ std::unique_ptr<GL::Context> Context::Create(const WindowInfo& wi, const Version
 #if defined(USE_WAYLAND)
   if (wi.type == WindowInfo::Type::Wayland)
     context = ContextEGLWayland::Create(wi, versions_to_try, num_versions_to_try);
+#endif
+
+#if defined(USE_DRMKMS)
+  if (wi.type == WindowInfo::Type::DRM)
+    context = ContextEGLDRM::Create(wi, versions_to_try, num_versions_to_try);
 #endif
 
   if (!context)

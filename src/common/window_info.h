@@ -13,11 +13,13 @@ struct WindowInfo
     MacOS,
     Android,
     Libretro,
+    DRM,
   };
 
   enum class SurfaceFormat
   {
     None,
+    Auto,
     RGB8,
     RGBA8,
     RGB565,

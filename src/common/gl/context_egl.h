@@ -23,6 +23,7 @@ public:
   virtual std::unique_ptr<Context> CreateSharedContext(const WindowInfo& wi) override;
 
 protected:
+  virtual bool SetDisplay();
   virtual EGLNativeWindowType GetNativeWindow(EGLConfig config);
 
   bool Initialize(const Version* versions_to_try, size_t num_versions_to_try);
