@@ -1,16 +1,21 @@
 #include "context_egl_drm.h"
 #include "../log.h"
+#include "../assert.h"
 #include <drm.h>
 #include <drm_fourcc.h>
 #include <gbm.h>
 Log_SetChannel(GL::ContextEGLDRM);
 
 namespace GL {
-ContextEGLDRM::ContextEGLDRM(const WindowInfo& wi) : ContextEGL(wi) {}
+ContextEGLDRM::ContextEGLDRM(const WindowInfo& wi) : ContextEGL(wi)
+{
+  StartPresentThread();
+}
+
 ContextEGLDRM::~ContextEGLDRM()
 {
-  if (m_last_front_buffer)
-    GetDisplay()->ReleaseBuffer(m_last_front_buffer);
+  StopPresentThread();
+  Assert(!m_current_present_buffer);
 }
 
 std::unique_ptr<Context> ContextEGLDRM::Create(const WindowInfo& wi, const Version* versions_to_try,
@@ -75,6 +80,7 @@ bool ContextEGLDRM::SwapBuffers()
   if (!ContextEGL::SwapBuffers())
     return false;
 
+#if 0
   DRMDisplay::Buffer* front_buffer = GetDisplay()->LockFrontBuffer();
   if (!front_buffer)
     return false;
@@ -85,6 +91,15 @@ bool ContextEGLDRM::SwapBuffers()
     GetDisplay()->ReleaseBuffer(m_last_front_buffer);
 
   m_last_front_buffer = front_buffer;
+#else
+  std::unique_lock lock(m_present_mutex);
+  m_present_pending.store(true);
+  m_present_cv.notify_one();
+  if (m_vsync)
+    m_present_done_cv.wait(lock, [this]() { return !m_present_pending.load(); });
+
+#endif
+
   return true;
 }
 
@@ -93,8 +108,62 @@ bool ContextEGLDRM::SetSwapInterval(s32 interval)
   if (interval < 0 || interval > 1)
     return false;
 
+  std::unique_lock lock(m_present_mutex);
   m_vsync = (interval > 0);
   return true;
+}
+
+void ContextEGLDRM::StartPresentThread()
+{
+  m_present_thread_shutdown.store(false);
+  m_present_thread = std::thread(&ContextEGLDRM::PresentThread, this);
+}
+
+void ContextEGLDRM::StopPresentThread()
+{
+  if (!m_present_thread.joinable())
+    return;
+
+  {
+    std::unique_lock lock(m_present_mutex);
+    m_present_thread_shutdown.store(true);
+    m_present_cv.notify_one();
+  }
+
+  m_present_thread.join();
+}
+
+void ContextEGLDRM::PresentThread()
+{
+  std::unique_lock lock(m_present_mutex);
+
+  while (!m_present_thread_shutdown.load())
+  {
+    m_present_cv.wait(lock);
+
+    if (!m_present_pending.load())
+      continue;
+
+    DRMDisplay::Buffer* next_buffer = GetDisplay()->LockFrontBuffer();
+    const bool wait_for_vsync = m_vsync && m_current_present_buffer;
+
+    lock.unlock();
+    GetDisplay()->PresentSurface(next_buffer, wait_for_vsync);
+    lock.lock();
+
+    if (m_current_present_buffer)
+      GetDisplay()->ReleaseBuffer(m_current_present_buffer);
+
+    m_current_present_buffer = next_buffer;
+    m_present_pending.store(false);
+    m_present_done_cv.notify_one();
+  }
+
+  if (m_current_present_buffer)
+  {
+    GetDisplay()->ReleaseBuffer(m_current_present_buffer);
+    m_current_present_buffer = nullptr;
+  }
 }
 
 } // namespace GL

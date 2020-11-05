@@ -1,6 +1,10 @@
 #pragma once
 #include "../drm_display.h"
 #include "context_egl.h"
+#include <atomic>
+#include <thread>
+#include <condition_variable>
+#include <mutex>
 
 namespace GL {
 
@@ -26,9 +30,20 @@ protected:
 private:
   DRMDisplay* GetDisplay() { return static_cast<DRMDisplay*>(m_wi.display_connection); }
 
-  DRMDisplay::Buffer* m_last_front_buffer = nullptr;
+  void StartPresentThread();
+  void StopPresentThread();
+  void PresentThread();
 
   bool m_vsync = true;
+
+  std::thread m_present_thread;
+  std::mutex m_present_mutex;
+  std::condition_variable m_present_cv;
+  std::atomic_bool m_present_pending{ false };
+  std::atomic_bool m_present_thread_shutdown{ false };
+  std::condition_variable m_present_done_cv;
+
+  DRMDisplay::Buffer* m_current_present_buffer = nullptr;
 };
 
 } // namespace GL
