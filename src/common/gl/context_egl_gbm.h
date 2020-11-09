@@ -2,17 +2,20 @@
 #include "../drm_display.h"
 #include "context_egl.h"
 #include <atomic>
-#include <thread>
 #include <condition_variable>
+#include <gbm.h>
 #include <mutex>
+#include <thread>
+
+#define CONTEXT_EGL_GBM_USE_PRESENT_THREAD 1
 
 namespace GL {
 
-class ContextEGLDRM final : public ContextEGL
+class ContextEGLGBM final : public ContextEGL
 {
 public:
-  ContextEGLDRM(const WindowInfo& wi);
-  ~ContextEGLDRM() override;
+  ContextEGLGBM(const WindowInfo& wi);
+  ~ContextEGLGBM() override;
 
   static std::unique_ptr<Context> Create(const WindowInfo& wi, const Version* versions_to_try,
                                          size_t num_versions_to_try);
@@ -28,7 +31,23 @@ protected:
   EGLNativeWindowType GetNativeWindow(EGLConfig config) override;
 
 private:
+  enum : u32
+  {
+    MAX_BUFFERS = 5
+  };
+
+  struct Buffer
+  {
+    struct gbm_bo* bo;
+    u32 fb_id;
+  };
+
   DRMDisplay* GetDisplay() { return static_cast<DRMDisplay*>(m_wi.display_connection); }
+
+  bool CreateGBMDevice();
+  Buffer* LockFrontBuffer();
+  void ReleaseBuffer(Buffer* buffer);
+  void PresentBuffer(Buffer* buffer, bool wait_for_vsync);
 
   void StartPresentThread();
   void StopPresentThread();
@@ -36,14 +55,22 @@ private:
 
   bool m_vsync = true;
 
+  struct gbm_device* m_gbm_device = nullptr;
+  struct gbm_surface* m_fb_surface = nullptr;
+
+#ifdef CONTEXT_EGL_GBM_USE_PRESENT_THREAD
   std::thread m_present_thread;
   std::mutex m_present_mutex;
   std::condition_variable m_present_cv;
-  std::atomic_bool m_present_pending{ false };
-  std::atomic_bool m_present_thread_shutdown{ false };
+  std::atomic_bool m_present_pending{false};
+  std::atomic_bool m_present_thread_shutdown{false};
   std::condition_variable m_present_done_cv;
 
-  DRMDisplay::Buffer* m_current_present_buffer = nullptr;
+  Buffer* m_current_present_buffer = nullptr;
+#endif
+
+  u32 m_num_buffers = 0;
+  std::array<Buffer, MAX_BUFFERS> m_buffers{};
 };
 
 } // namespace GL

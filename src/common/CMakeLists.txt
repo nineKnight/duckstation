@@ -143,7 +143,7 @@ if(USE_DRMKMS)
     drm_display.cpp
     drm_display.h
   )
-target_link_libraries(common PUBLIC GBM::GBM Libdrm::Libdrm)
+  target_link_libraries(common PUBLIC Libdrm::Libdrm)
 endif()
 
 if(USE_EGL)
@@ -166,11 +166,12 @@ if(USE_EGL)
     )
   endif()
   if(USE_DRMKMS)
-    target_compile_definitions(common PRIVATE "-DUSE_DRMKMS=1")
+    target_compile_definitions(common PRIVATE "-DUSE_GBM=1")
     target_sources(common PRIVATE
-      gl/context_egl_drm.cpp
-      gl/context_egl_drm.h
+      gl/context_egl_gbm.cpp
+      gl/context_egl_gbm.h
     )
+    target_link_libraries(common PUBLIC GBM::GBM)
   endif()
 endif()
 

@@ -1,6 +1,8 @@
 #include "context_egl.h"
 #include "../assert.h"
 #include "../log.h"
+#include <optional>
+#include <vector>
 Log_SetChannel(GL::ContextEGL);
 
 namespace GL {
@@ -224,6 +226,36 @@ bool ContextEGL::CreatePBufferSurface()
   return true;
 }
 
+bool ContextEGL::CheckConfigSurfaceFormat(EGLConfig config, WindowInfo::SurfaceFormat format) const
+{
+  int red_size, green_size, blue_size, alpha_size;
+  if (!eglGetConfigAttrib(m_display, config, EGL_RED_SIZE, &red_size) ||
+      !eglGetConfigAttrib(m_display, config, EGL_GREEN_SIZE, &green_size) ||
+      !eglGetConfigAttrib(m_display, config, EGL_BLUE_SIZE, &blue_size) ||
+      !eglGetConfigAttrib(m_display, config, EGL_ALPHA_SIZE, &alpha_size))
+  {
+    return false;
+  }
+
+  switch (format)
+  {
+    case WindowInfo::SurfaceFormat::Auto:
+      return true;
+
+    case WindowInfo::SurfaceFormat::RGB8:
+      return (red_size == 8 && green_size == 8 && blue_size == 8);
+
+    case WindowInfo::SurfaceFormat::RGBA8:
+      return (red_size == 8 && green_size == 8 && blue_size == 8 && alpha_size == 8);
+
+    case WindowInfo::SurfaceFormat::RGB565:
+      return (red_size == 5 && green_size == 6 && blue_size == 5);
+
+    default:
+      return false;
+  }
+}
+
 bool ContextEGL::CreateContext(const Version& version, EGLContext share_context)
 {
   int surface_attribs[16] = {
@@ -280,11 +312,34 @@ bool ContextEGL::CreateContext(const Version& version, EGLContext share_context)
   surface_attribs[nsurface_attribs++] = 0;
 
   EGLint num_configs;
-  EGLConfig config;
-  if (!eglChooseConfig(m_display, surface_attribs, &config, 1, &num_configs) || num_configs == 0)
+  if (!eglChooseConfig(m_display, surface_attribs, nullptr, 0, &num_configs) || num_configs == 0)
   {
     Log_ErrorPrintf("eglChooseConfig() failed: %d", eglGetError());
     return false;
+  }
+
+  std::vector<EGLConfig> configs(static_cast<u32>(num_configs));
+  if (!eglChooseConfig(m_display, surface_attribs, configs.data(), num_configs, &num_configs))
+  {
+    Log_ErrorPrintf("eglChooseConfig() failed: %d", eglGetError());
+    return false;
+  }
+  configs.resize(static_cast<u32>(num_configs));
+
+  std::optional<EGLConfig> config;
+  for (EGLConfig check_config : configs)
+  {
+    if (CheckConfigSurfaceFormat(check_config, m_wi.surface_format))
+    {
+      config = check_config;
+      break;
+    }
+  }
+
+  if (!config.has_value())
+  {
+    Log_WarningPrintf("No EGL configs matched exactly, using first.");
+    config = configs.front();
   }
 
   int attribs[8];
@@ -300,11 +355,11 @@ bool ContextEGL::CreateContext(const Version& version, EGLContext share_context)
   attribs[nattribs++] = 0;
 
   eglBindAPI((version.profile == Profile::ES) ? EGL_OPENGL_ES_API : EGL_OPENGL_API);
-  m_context = eglCreateContext(m_display, config, share_context, attribs);
+  m_context = eglCreateContext(m_display, config.value(), share_context, attribs);
   if (!m_context)
     return false;
 
-  m_config = config;
+  m_config = config.value();
   m_version = version;
   return true;
 }

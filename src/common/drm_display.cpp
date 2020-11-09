@@ -12,18 +12,6 @@ DRMDisplay::DRMDisplay(int card /*= 1*/) : m_card_id(card) {}
 
 DRMDisplay::~DRMDisplay()
 {
-  while (m_num_buffers > 0)
-  {
-    Buffer& buffer = m_buffers[--m_num_buffers];
-    drmModeRmFB(m_card_fd, buffer.fb_id);
-  }
-
-  if (m_fb_surface)
-    gbm_surface_destroy(m_fb_surface);
-
-  if (m_gbm_device)
-    gbm_device_destroy(m_gbm_device);
-
   if (m_connector)
     drmModeFreeConnector(m_connector);
 
@@ -188,85 +176,38 @@ bool DRMDisplay::TryOpeningCard(int card)
 
   drmModeFreeResources(resources);
 
-  m_gbm_device = gbm_create_device(m_card_fd);
-  if (!m_gbm_device)
-  {
-    Log_ErrorPrintf("gbm_create_device() failed: %d", errno);
-    return false;
-  }
-
   m_card_id = card;
   return true;
 }
 
-struct gbm_surface* DRMDisplay::CreateFramebufferSurface(u32 fourcc, u32 flags)
+std::optional<u32> DRMDisplay::AddBuffer(u32 width, u32 height, u32 format, u32 handle, u32 pitch, u32 offset)
 {
-  Assert(!m_fb_surface);
+  uint32_t bo_handles[4] = {handle, 0, 0, 0};
+  uint32_t pitches[4] = {pitch, 0, 0, 0};
+  uint32_t offsets[4] = {offset, 0, 0, 0};
 
-  m_fb_surface = gbm_surface_create(m_gbm_device, GetWidth(), GetHeight(), fourcc, flags | GBM_BO_USE_SCANOUT);
-  if (!m_fb_surface)
+  u32 fb_id;
+  int res = drmModeAddFB2(m_card_fd, width, height, format, bo_handles, pitches, offsets, &fb_id, 0);
+  if (res != 0)
   {
-    Log_ErrorPrintf("gbm_surface_create() failed: %d", errno);
-    return nullptr;
+    Log_ErrorPrintf("drmModeAddFB2() failed: %d", res);
+    return std::nullopt;
   }
 
-  return m_fb_surface;
+  return fb_id;
 }
 
-DRMDisplay::Buffer* DRMDisplay::LockFrontBuffer()
+void DRMDisplay::RemoveBuffer(u32 fb_id)
 {
-  struct gbm_bo* bo = gbm_surface_lock_front_buffer(m_fb_surface);
-
-  Buffer* buffer = nullptr;
-  for (u32 i = 0; i < m_num_buffers; i++)
-  {
-    if (m_buffers[i].bo == bo)
-    {
-      buffer = &m_buffers[i];
-      break;
-    }
-  }
-
-  if (!buffer)
-  {
-    // haven't tracked this buffer yet
-    Assert(m_num_buffers < MAX_BUFFERS);
-    buffer = &m_buffers[m_num_buffers];
-    buffer->bo = bo;
-    buffer->width = gbm_bo_get_width(bo);
-    buffer->height = gbm_bo_get_height(bo);
-    buffer->stride = gbm_bo_get_stride(bo);
-    buffer->format = gbm_bo_get_format(bo);
-
-    uint32_t bo_handles[4] = {gbm_bo_get_handle(bo).u32, 0, 0, 0};
-    uint32_t pitches[4] = {buffer->stride, 0, 0, 0};
-    uint32_t offsets[4] = {0, 0, 0, 0};
-
-    int res = drmModeAddFB2(m_card_fd, buffer->width, buffer->height, buffer->format, bo_handles, pitches, offsets,
-                            &buffer->fb_id, 0);
-    if (res != 0)
-    {
-      Log_ErrorPrintf("drmModeAddFB2() failed: %d", res);
-      return nullptr;
-    }
-
-    m_num_buffers++;
-  }
-
-  return buffer;
+  drmModeRmFB(m_card_fd, fb_id);
 }
 
-void DRMDisplay::ReleaseBuffer(Buffer* buffer)
-{
-  gbm_surface_release_buffer(m_fb_surface, buffer->bo);
-}
-
-void DRMDisplay::PresentSurface(Buffer* buffer, bool wait_for_vsync)
+void DRMDisplay::PresentBuffer(u32 fb_id, bool wait_for_vsync)
 {
   if (!wait_for_vsync)
   {
     u32 connector_id = m_connector->connector_id;
-    int res = drmModeSetCrtc(m_card_fd, m_crtc_id, buffer->fb_id, 0, 0, &connector_id, 1, m_mode);
+    int res = drmModeSetCrtc(m_card_fd, m_crtc_id, fb_id, 0, 0, &connector_id, 1, m_mode);
     if (res != 0)
       Log_ErrorPrintf("drmModeSetCrtc() failed: %d", res);
 
@@ -280,7 +221,7 @@ void DRMDisplay::PresentSurface(Buffer* buffer, bool wait_for_vsync)
     *reinterpret_cast<bool*>(data) = false;
   };
 
-  int res = drmModePageFlip(m_card_fd, m_crtc_id, buffer->fb_id, DRM_MODE_PAGE_FLIP_EVENT, &waiting_for_flip);
+  int res = drmModePageFlip(m_card_fd, m_crtc_id, fb_id, DRM_MODE_PAGE_FLIP_EVENT, &waiting_for_flip);
   if (res != 0)
   {
     Log_ErrorPrintf("drmModePageFlip() failed: %d", res);

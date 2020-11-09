@@ -32,6 +32,7 @@ protected:
   bool CreateContextAndSurface(const Version& version, EGLContext share_context, bool make_current);
   bool CreateSurface();
   bool CreatePBufferSurface();
+  bool CheckConfigSurfaceFormat(EGLConfig config, WindowInfo::SurfaceFormat format) const;
 
   EGLDisplay m_display = EGL_NO_DISPLAY;
   EGLSurface m_surface = EGL_NO_SURFACE;
