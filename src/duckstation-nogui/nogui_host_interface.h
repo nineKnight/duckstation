@@ -43,12 +43,11 @@ protected:
   void OnSystemPerformanceCountersUpdated() override;
 
   void RequestExit() override;
-  void PollAndUpdate() override;
+  virtual void PollAndUpdate() override;
 
   virtual std::optional<HostKeyCode> GetHostKeyCode(const std::string_view key_code) const override;
   void UpdateInputMap() override;
 
-private:
   virtual bool CreatePlatformWindow() = 0;
   virtual void DestroyPlatformWindow() = 0;
   virtual std::optional<WindowInfo> GetPlatformWindowInfo() = 0;
@@ -57,6 +56,9 @@ private:
 
   bool IsFullscreen() const override;
   bool SetFullscreen(bool enabled) override;
+
+  bool CreateDisplay();
+  void DestroyDisplay();
 
   std::unique_ptr<INISettingsInterface> m_settings_interface;
 

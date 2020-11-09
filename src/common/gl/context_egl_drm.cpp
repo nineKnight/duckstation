@@ -72,7 +72,7 @@ EGLNativeWindowType ContextEGLDRM::GetNativeWindow(EGLConfig config)
   if (!surface)
     return nullptr;
 
-  return reinterpret_cast<EGLNativeDisplayType>(surface);
+  return (EGLNativeWindowType)((void*)surface);
 }
 
 bool ContextEGLDRM::SwapBuffers()

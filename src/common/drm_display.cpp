@@ -1,7 +1,7 @@
 #include "drm_display.h"
+#include "common/assert.h"
 #include "common/log.h"
 #include "common/string.h"
-#include "common/assert.h"
 #include "file_system.h"
 #include <fcntl.h>
 #include <string.h>
@@ -81,10 +81,29 @@ static uint32_t find_crtc_for_connector(int card_fd, const drmModeRes* resources
 
 bool DRMDisplay::Initialize()
 {
-  m_card_fd = open(TinyString::FromFormat("/dev/dri/card%d", m_card_id), O_RDWR);
+  if (m_card_id < 0)
+  {
+    for (int i = 0; i < 10; i++)
+    {
+      if (TryOpeningCard(i))
+        return true;
+    }
+
+    return false;
+  }
+
+  return TryOpeningCard(m_card_id);
+}
+
+bool DRMDisplay::TryOpeningCard(int card)
+{
+  if (m_card_fd >= 0)
+    close(m_card_fd);
+
+  m_card_fd = open(TinyString::FromFormat("/dev/dri/card%d", card), O_RDWR);
   if (m_card_fd < 0)
   {
-    Log_ErrorPrintf("open(/dev/dri/card%d) failed: %d (%s)", m_card_id, errno, strerror(errno));
+    Log_ErrorPrintf("open(/dev/dri/card%d) failed: %d (%s)", card, errno, strerror(errno));
     return false;
   }
 
@@ -176,6 +195,7 @@ bool DRMDisplay::Initialize()
     return false;
   }
 
+  m_card_id = card;
   return true;
 }
 

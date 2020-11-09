@@ -18,7 +18,7 @@ public:
     u32 fb_id;
   };
 
-  DRMDisplay(int card = 1);
+  DRMDisplay(int card = -1);
   ~DRMDisplay();
 
   bool Initialize();
@@ -40,8 +40,10 @@ public:
 private:
   enum : u32
   {
-    MAX_BUFFERS = 3
+    MAX_BUFFERS = 5
   };
+
+  bool TryOpeningCard(int card);
 
   int m_card_id = 0;
   int m_card_fd = -1;

@@ -332,6 +332,9 @@ protected:
   bool m_timer_resolution_increased = false;
   bool m_speed_limiter_enabled = true;
 
+  // running in batch mode? i.e. exit after stopping emulation
+  bool m_batch_mode = false;
+
 private:
   void InitializeUserDirectory();
   void RegisterGeneralHotkeys();
@@ -374,9 +377,6 @@ private:
     ControllerRumbleCallback update_callback;
   };
   std::vector<ControllerRumbleState> m_controller_vibration_motors;
-
-  // running in batch mode? i.e. exit after stopping emulation
-  bool m_batch_mode = false;
 
 #ifdef WITH_DISCORD_PRESENCE
   // discord rich presence

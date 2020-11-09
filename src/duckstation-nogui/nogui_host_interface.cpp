@@ -8,12 +8,12 @@
 #include "core/gpu.h"
 #include "core/host_display.h"
 #include "core/system.h"
+#include "frontend-common/controller_interface.h"
 #include "frontend-common/icon.h"
 #include "frontend-common/imgui_styles.h"
 #include "frontend-common/ini_settings_interface.h"
 #include "frontend-common/opengl_host_display.h"
 #include "frontend-common/vulkan_host_display.h"
-#include "frontend-common/controller_interface.h"
 #include "scmversion/scmversion.h"
 #include <cinttypes>
 #include <cmath>
@@ -54,7 +54,7 @@ void NoGUIHostInterface::CreateImGuiContext()
   ImGui::AddRobotoRegularFont(15.0f * framebuffer_scale);
 }
 
-bool NoGUIHostInterface::AcquireHostDisplay()
+bool NoGUIHostInterface::CreateDisplay()
 {
   std::optional<WindowInfo> wi = GetPlatformWindowInfo();
   if (!wi)
@@ -100,12 +100,28 @@ bool NoGUIHostInterface::AcquireHostDisplay()
   return true;
 }
 
-void NoGUIHostInterface::ReleaseHostDisplay()
+void NoGUIHostInterface::DestroyDisplay()
 {
   m_display->DestroyRenderDevice();
   m_display.reset();
 
   ImGui::DestroyContext();
+}
+
+bool NoGUIHostInterface::AcquireHostDisplay()
+{
+  if (!CreateHostDisplayResources())
+    return false;
+
+  return true;
+}
+
+void NoGUIHostInterface::ReleaseHostDisplay()
+{
+  ReleaseHostDisplayResources();
+
+  // restore vsync, since we don't want to burn cycles at the menu
+  m_display->SetVSync(true);
 }
 
 std::optional<CommonHostInterface::HostKeyCode>
@@ -140,7 +156,7 @@ void NoGUIHostInterface::OnSystemPerformanceCountersUpdated()
 
 void NoGUIHostInterface::RequestExit()
 {
-  Log_ErrorPrintf("TODO");
+  m_quit_request = true;
 }
 
 void NoGUIHostInterface::PollAndUpdate()
@@ -172,12 +188,21 @@ bool NoGUIHostInterface::Initialize()
     return false;
   }
 
+  if (!CreateDisplay())
+  {
+    Log_ErrorPrintf("Failed to create host display");
+    return false;
+  }
+
   // Change to the user directory so that all default/relative paths in the config are after this.
   if (!FileSystem::SetWorkingDirectory(m_user_directory.c_str()))
     Log_ErrorPrintf("Failed to set working directory to '%s'", m_user_directory.c_str());
 
   // process events to pick up controllers before updating input map
   UpdateInputMap();
+
+  // we're always in batch mode for now
+  m_batch_mode = true;
   return true;
 }
 
@@ -185,6 +210,7 @@ void NoGUIHostInterface::Shutdown()
 {
   CommonHostInterface::Shutdown();
 
+  DestroyDisplay();
   DestroyPlatformWindow();
 }
 
@@ -218,6 +244,9 @@ void NoGUIHostInterface::LoadSettings()
 
   CommonHostInterface::LoadSettings(*m_settings_interface.get());
   CommonHostInterface::FixIncompatibleSettings(false);
+
+  // Some things we definitely don't want.
+  g_settings.confim_power_off = false;
 }
 
 void NoGUIHostInterface::SetDefaultSettings(SettingsInterface& si)
