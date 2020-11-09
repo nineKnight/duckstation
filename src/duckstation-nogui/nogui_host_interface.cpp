@@ -102,10 +102,12 @@ bool NoGUIHostInterface::CreateDisplay()
 
 void NoGUIHostInterface::DestroyDisplay()
 {
-  m_display->DestroyRenderDevice();
+  if (m_display)
+    m_display->DestroyRenderDevice();
   m_display.reset();
 
-  ImGui::DestroyContext();
+  if (ImGui::GetCurrentContext())
+    ImGui::DestroyContext();
 }
 
 bool NoGUIHostInterface::AcquireHostDisplay()
