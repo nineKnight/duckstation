@@ -299,8 +299,8 @@ bool ContextWGL::CreateVersionContext(const Version& version, HGLRC share_contex
   else if (version.profile == Profile::ES)
   {
     const int attribs[] = {
-      WGL_CONTEXT_PROFILE_MASK_ARB,
-      ((version.major_version >= 2) ? WGL_CONTEXT_ES2_PROFILE_BIT_EXT : WGL_CONTEXT_ES_PROFILE_BIT_EXT),
+      //WGL_CONTEXT_PROFILE_MASK_ARB,
+      //((version.major_version >= 2) ? WGL_CONTEXT_ES2_PROFILE_BIT_EXT : WGL_CONTEXT_ES_PROFILE_BIT_EXT),
       WGL_CONTEXT_MAJOR_VERSION_ARB,
       version.major_version,
       WGL_CONTEXT_MINOR_VERSION_ARB,
